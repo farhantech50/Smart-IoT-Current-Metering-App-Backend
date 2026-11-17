@@ -11,15 +11,14 @@ const PORT = process.env.PORT || 5001;
 /* ==========================================
    SERVER CONFIGURATION
 
-   LOCAL (self-signed certs in ./cert):
+   LOCAL:
    const USE_HTTPS = true;
 
-   PRODUCTION / CLOUD (behind reverse proxy or standard HTTP):
+   RENDER / NGINX:
    const USE_HTTPS = false;
 ========================================== */
 
-const hasCert = fs.existsSync("./cert/server.key") && fs.existsSync("./cert/server.crt");
-const USE_HTTPS = hasCert;
+const USE_HTTPS = true;
 
 let server;
 
