@@ -1,0 +1,14 @@
+model MeterReading {
+  id         BigInt   @id @default(autoincrement())
+  floor      Int      @db.SmallInt
+  meter      Int      @db.SmallInt
+  current    Float    @default(0.0)
+  power      Float    @default(0.0)
+  relayOn    Boolean  @default(false)
+  recordedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([floor, meter, recordedAt])
+  @@index([recordedAt])
+  @@map("meter_readings")
+}
+

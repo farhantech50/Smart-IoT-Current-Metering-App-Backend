@@ -1,0 +1,107 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ERP Base API",
+    "description": "API documentation for Circle Seed ERP",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://192.168.68.120:5000",
+      "description": "Farhan-PC"
+    },
+    {
+      "url": "https://202.83.126.123:5000",
+      "description": "Farhan-PC - Real_IP"
+    },
+    {
+      "url": "https://62.84.177.235:8443",
+      "description": "Contabo-VPS"
+    },
+    {
+      "url": "https://localhost:5000",
+      "description": "Localhost"
+    }
+  ],
+  "paths": {
+    "/api/meters/summary": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meters/{floor}/{meter}/history": {
+      "get": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "floor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "meter",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}
