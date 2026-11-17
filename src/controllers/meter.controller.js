@@ -1,8 +1,11 @@
 import prisma from "../../config/dbConfig.js";
 
 /**
- * GET /api/meters/:floor/:meter/history?from=YYYY-MM-DD&to=YYYY-MM-DD&days=N
- * Calculates total energy consumed (kWh) and returns readings for a specific device.
+ * GET /api/meters/:floor/:meter/history
+ * Query params: from, to, days, page (default 1), limit (default 10, max 100)
+ *
+ * - totalKWh is calculated from ALL readings in the date range (not just the page)
+ * - readings returned are paginated
  */
 export async function getDeviceHistory(req, res) {
   try {
@@ -14,6 +17,7 @@ export async function getDeviceHistory(req, res) {
       return res.status(400).json({ error: "Invalid floor or meter identifier." });
     }
 
+    // --- Parse date range ---
     let startDate;
     let endDate = new Date();
 
@@ -40,64 +44,58 @@ export async function getDeviceHistory(req, res) {
       startDate.setDate(startDate.getDate() - daysCount);
     }
 
-    // Fetch ordered historical readings for this meter
-    const readings = await prisma.meterReading.findMany({
-      where: {
-        floor,
-        meter,
-        recordedAt: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: {
-        recordedAt: "asc",
-      },
-      select: {
-        id: true,
-        current: true,
-        power: true,
-        relayOn: true,
-        recordedAt: true,
-      },
-    });
+    // --- Pagination params ---
+    const page  = Math.max(parseInt(req.query.page)  || 1,  1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+    const skip  = (page - 1) * limit;
 
-    if (readings.length === 0) {
-      return res.json({
-        floor,
-        meter,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        totalKWh: 0.0,
-        readingsCount: 0,
-        readings: [],
-      });
-    }
+    const whereClause = {
+      floor,
+      meter,
+      recordedAt: { gte: startDate, lte: endDate },
+    };
 
-    // Integrate power (Watts) over time to calculate total kWh (Trapezoidal Rule)
-    // Energy (Wh) = avgPower * (timeDiff in hours)
+    const selectClause = {
+      id: true,
+      current: true,
+      power: true,
+      relayOn: true,
+      recordedAt: true,
+    };
+
+    // Run total count + paginated page + full power list (for kWh) in parallel
+    const [totalCount, pageReadings, allForKwh] = await Promise.all([
+      prisma.meterReading.count({ where: whereClause }),
+      prisma.meterReading.findMany({
+        where: whereClause,
+        orderBy: { recordedAt: "desc" }, // newest first for the table
+        skip,
+        take: limit,
+        select: selectClause,
+      }),
+      prisma.meterReading.findMany({
+        where: whereClause,
+        orderBy: { recordedAt: "asc" },
+        select: { power: true, recordedAt: true },
+      }),
+    ]);
+
+    // --- Trapezoidal integration for total kWh ---
     let totalWattHours = 0;
-
-    for (let i = 1; i < readings.length; i++) {
-      const prev = readings[i - 1];
-      const curr = readings[i];
-
-      const timeDiffHours = (new Date(curr.recordedAt) - new Date(prev.recordedAt)) / (1000 * 60 * 60);
-
-      // Only integrate if gap between successive records is <= 10 minutes (avoids counting offline periods)
+    for (let i = 1; i < allForKwh.length; i++) {
+      const prev = allForKwh[i - 1];
+      const curr = allForKwh[i];
+      const timeDiffHours =
+        (new Date(curr.recordedAt) - new Date(prev.recordedAt)) / (1000 * 60 * 60);
+      // skip gaps > 10 min (device was offline)
       if (timeDiffHours > 0 && timeDiffHours <= 10 / 60) {
-        const avgPowerWatts = (prev.power + curr.power) / 2;
-        totalWattHours += avgPowerWatts * timeDiffHours;
+        totalWattHours += ((prev.power + curr.power) / 2) * timeDiffHours;
       }
     }
-
     const totalKWh = totalWattHours / 1000;
 
-    // Convert BigInt id to string for JSON serialization
-    const serializedReadings = readings.map((r) => ({
-      ...r,
-      id: r.id.toString(),
-    }));
+    // Serialize BigInt IDs
+    const readings = pageReadings.map((r) => ({ ...r, id: r.id.toString() }));
 
     return res.json({
       floor,
@@ -105,8 +103,11 @@ export async function getDeviceHistory(req, res) {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       totalKWh: Number(totalKWh.toFixed(4)),
-      readingsCount: readings.length,
-      readings: serializedReadings,
+      readingsCount: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      readings,
     });
   } catch (error) {
     console.error("Error in getDeviceHistory:", error);
@@ -129,11 +130,7 @@ export async function getMetersSummary(req, res) {
       ],
     });
 
-    const serialized = latest.map((r) => ({
-      ...r,
-      id: r.id.toString(),
-    }));
-
+    const serialized = latest.map((r) => ({ ...r, id: r.id.toString() }));
     return res.json({ totalTracked: serialized.length, devices: serialized });
   } catch (error) {
     console.error("Error in getMetersSummary:", error);
