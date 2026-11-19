@@ -1,6 +1,17 @@
 import prisma from "../../config/dbConfig.js";
 
 /**
+ * Convert raw Apparent Power (VA) to estimated Real Power (Watts)
+ * using tiered power factor estimation.
+ */
+function estimateRealPower(va) {
+  if (va <= 120) {
+    return va * 0.82; // baseline fan, LED, small electronics
+  }
+  return va * 0.67; // fridge compressor + baseline
+}
+
+/**
  * GET /api/meters/:floor/:meter/history
  * Query params: from, to, days, page (default 1), limit (default 10, max 100)
  *
@@ -33,7 +44,7 @@ export async function getDeviceHistory(req, res) {
       // auto‑swap if reversed
       if (startDate > endDate) {
         const temp = startDate;
-        startDate = new Date(to);
+        startDate = new Date(endDate);
         startDate.setHours(0, 0, 0, 0);
         endDate = new Date(temp);
         endDate.setHours(23, 59, 59, 999);
@@ -89,7 +100,9 @@ export async function getDeviceHistory(req, res) {
         (new Date(curr.recordedAt) - new Date(prev.recordedAt)) / (1000 * 60 * 60);
       // skip gaps > 10 min (device was offline)
       if (timeDiffHours > 0 && timeDiffHours <= 10 / 60) {
-        totalWattHours += ((prev.power + curr.power) / 2) * timeDiffHours;
+        const prevRealPower = estimateRealPower(prev.power);
+        const currRealPower = estimateRealPower(curr.power);
+        totalWattHours += ((prevRealPower + currRealPower) / 2) * timeDiffHours;
       }
     }
     const totalKWh = totalWattHours / 1000;
