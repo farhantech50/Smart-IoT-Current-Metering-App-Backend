@@ -1,15 +1,5 @@
 import prisma from "../../config/dbConfig.js";
-
-/**
- * Convert raw Apparent Power (VA) to estimated Real Power (Watts)
- * using tiered power factor estimation.
- */
-function estimateRealPower(va) {
-  if (va <= 120) {
-    return va * 0.82; // baseline fan, LED, small electronics
-  }
-  return va * 0.67; // fridge compressor + baseline
-}
+import { estimateRealPower } from "../utils/power.js";
 
 /**
  * GET /api/meters/:floor/:meter/history
